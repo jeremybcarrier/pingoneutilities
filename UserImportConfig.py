@@ -7,7 +7,8 @@ import re
 import requests
 import base64
 import csv
-import getpass
+#import getpass
+import pwinput
 import configparser
 
 def printWelcome(version):
@@ -56,18 +57,22 @@ def getP1Geo():
     # *********
     # Prompts the user for the PingOne Geography and validates its format.
     # *********
-    getGeo = input(f'What is your PingOne Geography? (.com, .ca, .asia, .au, .eu, etc.):')
-    if re.match(r"^\.[a-zA-Z]{1,4}$",getGeo):
-        print(f'')
+    getGeo = input(f'What is your PingOne Geography? (.com, .ca, .asia, .au, .eu, etc.): [.com] ')
+    if not getGeo:
+        getGeo = ".com"  # Default to .com if no input is provided
         return getGeo.lower()
     else:
-        # Geo format is invalid, retry
-        print(f'')
-        print(f'*****************************')
-        print(f"Invalid format, please retry.")
-        print(f'*****************************')
-        print(f'')
-        getGeo = getP1Geo()
+        if re.match(r"^\.[a-zA-Z]{1,4}$",getGeo):
+            print(f'')
+            return getGeo.lower()
+        else:
+            # Geo format is invalid, retry
+            print(f'')
+            print(f'*****************************')
+            print(f"Invalid format, please retry.")
+            print(f'*****************************')
+            print(f'')
+            getGeo = getP1Geo()
 
 def getP1ClientId(p1ClientId, guidFormat):
     # *********
@@ -84,32 +89,16 @@ def getP1ClientId(p1ClientId, guidFormat):
         print(f'Error: The format of the client ID is invalid, please retry.')
         print(f'************************************************************')
         print(f'')
-        getClientId = getP1ClientId()
+        getClientId = getP1ClientId(p1ClientId, guidFormat)
 
 def getP1ClientSecret(p1ClientSecret):
     # *********
     #Prompts the user for the PingOne Client Secret securely.
     # *********
-    getClientSecret = getpass.getpass(f'What is your PingOne Client Secret? :')
+    #getClientSecret = getpass.getpass(f'What is your PingOne Client Secret? :')
+    getClientSecret = pwinput.pwinput(prompt='What is your PingOne Client Secret? :', mask='*')
     print(f'')
     return getClientSecret
-
-def getP1ClientType():
-    # *********
-    #Prompts the user for the client type and validates the input.
-    # *********
-    getClientType = input(f'What client type are you using? (basic / post):')
-    if re.match(r"^(basic|post)$", getClientType.lower()):
-        print(f'')
-        return getClientType.lower()
-    else:
-        # Client type is invalid, retry
-        print(f'')
-        print(f'************************************************')
-        print(f'Error: The client type is invalid, please retry.')
-        print(f'************************************************')
-        print(f'')
-        getClientType = getP1ClientType()
 
 def convertCreds(p1ClientId, p1ClientSecret):
     # *********
@@ -120,6 +109,111 @@ def convertCreds(p1ClientId, p1ClientSecret):
     b64CredBytes = base64.b64encode(credBytes)
     b64CredString = b64CredBytes.decode("ascii") 
     return b64CredString
+
+def performClientTestBasic(p1ClientId, p1ClientSecret, p1Geography, p1Environment):
+    # *********
+    # Attempts to authenticate with PingOne using the provided credentials using BASIC auth.
+    # *********
+    requestHeaders = ""
+
+    print(f'')
+    print(f'Checking client credentials with PingOne - attempting BASIC auth.')
+    print(f'')
+
+    # Call P1 token endpoint to get an access token with basic encoding
+    p1CredsB64 = convertCreds(p1ClientId, p1ClientSecret)
+    requestHeaders = {}
+    requestHeaders['Authorization'] = 'Basic ' + p1CredsB64
+    requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
+    requestBody = {'grant_type':'client_credentials'}
+
+
+    try:
+        hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
+        if hostCheckResult.status_code == 200:
+            print(f"Client connection validated with BASIC auth.")
+            print(f'')
+            return True, hostCheckResult.json()['access_token']
+        else:
+            print(f'')
+            print(f"****************************************************")
+            print(f"Failed to connect to PingOne client with BASIC auth.")
+            print(f"****************************************************")
+            print(f'')
+            return False,""
+    except requests.exceptions.RequestException:
+        print(f'')
+        print(f"****************************************************")
+        print(f"Failed to connect to PingOne client with BASIC auth.")
+        print(f"****************************************************")
+        print(f'')
+        return False,""
+
+def performClientTestPost(p1ClientId, p1ClientSecret, p1Geography, p1Environment):
+    # *********
+    # Attempts to authenticate with PingOne using the provided credentials using POST auth.
+    # *********
+    requestHeaders = ""
+
+    print(f'')
+    print(f'Checking client credentials with PingOne - attempting POST auth.')
+    print(f'')
+
+    # Call p1 token endpoint to get an access token with post encoding
+    requestHeaders = {}
+    requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
+    requestBody = {}
+    requestBody['client_id'] = p1ClientId
+    requestBody['client_secret'] = p1ClientSecret
+    requestBody['grant_type'] = 'client_credentials'
+
+    try:
+        #print (requestHeaders)
+        #print (requestBody)
+        #print (f"https://auth.pingone{p1Geography}/{p1Environment}/as/token")
+        hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
+        if hostCheckResult.status_code == 200:
+            print(f"Client connection validated with POST auth.")
+            print(f'')
+            return True, hostCheckResult.json()['access_token']
+        else:
+            print(f'')
+            print(f'***************************************************')
+            print(f"Failed to connect to PingOne client with POST auth.")
+            print(f'***************************************************')
+            print(f'')
+            return False,""
+    except requests.exceptions.RequestException:
+        print(f'')
+        print(f'***************************************************')
+        print(f"Failed to connect to PingOne client with POST auth.")
+        print(f'***************************************************')
+        print(f'')  
+        return False, ""
+
+def getP1ClientType(p1ClientId, p1ClientSecret, p1Geography, p1Environment):
+    # *********
+    # Tries to determine client type (basic or post)
+    # *********
+
+    # Try basic
+    tryBasic, p1At = performClientTestBasic(p1ClientId, p1ClientSecret, p1Geography, p1Environment)
+
+    if tryBasic == True:
+        return "basic", p1At
+    else:
+        # Try post
+        tryPost, p1At = performClientTestPost(p1ClientId, p1ClientSecret, p1Geography, p1Environment)
+        if tryPost == True:
+            return "post", p1At
+        else:
+            print(f'')
+            print(f'**************************************************************************************************************************************')
+            print(f'Error: Failed to connect to client with both BASIC and POST.  Please re-enter client details and ensure your worker client is enabled.')
+            print(f'**************************************************************************************************************************************')
+            return "failed",""
+
+"""
 
 def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType):
     # *********
@@ -192,45 +286,85 @@ def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1
             print(f'')  
             return "false",""
 
+"""
+
 def getTokenRefreshDuration():
     # *********
     # Prompts the user for the token refresh duration (in minutes) and validates the input.
     # *********
-    getRefreshDuration = input(f'How often do you want to refresh the worker access token, in minutes (59 minutes max)?:')
-    if re.match(r"^[0-9]{1,2}$", getRefreshDuration):
-        if((int(getRefreshDuration) > 0) and (int(getRefreshDuration) < 60)):
-            print(f'')
-            return getRefreshDuration
+    getRefreshDuration = input(f'How often do you want to refresh the worker access token, in minutes (59 minutes max)?: [30]')
+    if not getRefreshDuration:
+        getRefreshDuration = "30"  # Default to 30 minutes if no input is provided
+        return getRefreshDuration
+    else:
+        if re.match(r"^[0-9]{1,2}$", getRefreshDuration):
+            if((int(getRefreshDuration) > 0) and (int(getRefreshDuration) < 60)):
+                print(f'')
+                return getRefreshDuration
+            else:
+                print(f'')
+                print(f'*****************************************************************')
+                print(f"Invalid duration - must be numeric, greater than 0, less than 60.")
+                print(f'*****************************************************************')
+                print(f'')
+                getRefreshDuration = getTokenRefreshDuration()
         else:
             print(f'')
-            print(f'*****************************************************************')
+            print(f"*****************************************************************")
             print(f"Invalid duration - must be numeric, greater than 0, less than 60.")
             print(f'*****************************************************************')
             print(f'')
             getRefreshDuration = getTokenRefreshDuration()
-    else:
-        print(f'')
-        print(f"*****************************************************************")
-        print(f"Invalid duration - must be numeric, greater than 0, less than 60.")
-        print(f'*****************************************************************')
-        print(f'')
-        getRefreshDuration = getTokenRefreshDuration()
 
 def getCsvFileName():
     # *********
     # Prompts the user for the absolute path to the CSV file and checks if it exists.
     # *********
-    getFileName = input(f'What is the absolute path of your CSV file?:')
-    if os.path.exists(getFileName):
+
+    foundCsvFile = False
+    currentDirectory = os.getcwd()
+    firstFile = ""
+
+    print(f'Retrieving the list of CSV files in the current working directory.')
+    print(f'')
+
+    # get all files/diretories in the current working directory
+    allFiles = os.listdir(currentDirectory)
+    for file in allFiles:
+        if file.endswith(".csv"):
+            if foundCsvFile == False:
+                foundCsvFile = True
+                firstFile = currentDirectory + "/" + file
+                print(f'The following CSV files were found in the current working directory:')
+            print(f' - {currentDirectory}/{file}')
+
+    if foundCsvFile == False:
         print(f'')
-        return getFileName
+        print(f'*******************************************************************************')
+        print(f'No CSV files were found in the current working directory ({currentDirectory}).')
+        print(f'Please ensure you have a CSV file in this directory before proceeding.')
+        print(f'*******************************************************************************')
+        print(f'')
+        tryAgain = input(f'Press Enter to try again.')
+        return getCsvFileName()
     else:
         print(f'')
-        print(f"**********************************************************")
-        print(f"File could not be found ({getFileName}), please try again.")
-        print(f"**********************************************************")
-        print(f'')
-        getFileName = getCsvFileName()
+
+    getFileName = input(f'What is the absolute path of your CSV file?: [{firstFile}]')
+    if not getFileName:
+        getFileName = firstFile
+        return getFileName
+    else:
+        if os.path.exists(getFileName):
+            print(f'')
+            return getFileName
+        else:
+            print(f'')
+            print(f"**********************************************************")
+            print(f"File could not be found ({getFileName}), please try again.")
+            print(f"**********************************************************")
+            print(f'')
+            getFileName = getCsvFileName()
 
 def getSubattributes(p1AttributeNames, p1Attribute):
     # *********
@@ -371,35 +505,82 @@ def getForcedPasswordChange():
     # *********
     # Prompts the user to specify whether or not imported accounts should be required to change password on first login.
     # *********
-    getPasswordChange = input(f'After import, should users be forced to reset their password at first login? (true/false):')
-    if re.match(r"^(true|false)$", getPasswordChange.lower()):
-        print(f'')
+    getPasswordChange = input(f'After import, should users be forced to reset their password at first login? (true/false): [false] ')
+    if not getPasswordChange:
+        getPasswordChange = "false"  # Default to false if no input is provided
         return getPasswordChange.lower()
     else:
-        # Invalid input, retry
-        print(f'')
-        print(f'**********************************************')
-        print(f'Error: Please response either (true) or (false).')
-        print(f'**********************************************')
-        print(f'')
-        getPasswordChange = getForcedPasswordChange()
+        if re.match(r"^(true|false)$", getPasswordChange.lower()):
+            print(f'')
+            return getPasswordChange.lower()
+        else:
+            # Invalid input, retry
+            print(f'')
+            print(f'**********************************************')
+            print(f'Error: Please response either (true) or (false).')
+            print(f'**********************************************')
+            print(f'')
+            getPasswordChange = getForcedPasswordChange()
 
-def getDefaultPopulation(defaultPopulation, guidFormat):
+def getP1Populations(p1At, p1Environment, p1Geography):
+    # *********
+    # Retrieves the list of populations from the PingOne environment.
+    # Returns a list of population IDs.
+    # *********
+    requestPopHeaders = {}
+    requestPopHeaders['Authorization'] = "Bearer " + p1At
+    firstPopulation = ""
+
+    try:
+        print(f"Reading PingOne populations from environment {p1Environment}.")
+        print(f'')
+        print(f'The following populations were found in the environment:')
+        getPopulations = requests.get(f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/populations",headers=requestPopHeaders)
+        if getPopulations.status_code == 200:
+            for p1Population in getPopulations.json()['_embedded']['populations']:
+                #p1PopulationIds.append(p1Population['id'])
+                print(f' - ({p1Population["name"]}) {p1Population["id"]} ')
+                if firstPopulation == "":
+                    firstPopulation = p1Population['id']
+            print(f'')
+            return firstPopulation
+        else:
+            print(f'')
+            print(f'*******************************************************************************************************************')
+            print(f"Failed to read the populations of your PingOne environment.  Please ensure your worker has appropriate rights.  Exiting.")
+            print(f'*******************************************************************************************************************')
+            print(f'')
+            quit()
+    except:
+        print(f'')
+        print(f'*******************************************************************************************************************')
+        print("Failed to read the populations of your PingOne environment.  Please ensure your worker has appropriate rights.  Exiting.")
+        print(f'*******************************************************************************************************************')
+        print(f'')
+        quit()
+
+def getDefaultPopulation(p1At, p1Environment, p1Geography, defaultPopulation, guidFormat):
     # *********
     # Prompts the user to specify the default population for the imported users.
     # *********
-    getDefaultPopulation = input(f'For users where a PingOne population is not specified, what deafault population id should be used? (format: {defaultPopulation}):')
-    if re.match(guidFormat,getDefaultPopulation):
-        print(f'')
+    defaultP1Population = getP1Populations(p1At, p1Environment, p1Geography)
+
+    getDefaultPopulation = input(f'For users where a PingOne population is not specified, what deafault population id should be used?: [{defaultP1Population}] ')
+    if not getDefaultPopulation:
+        getDefaultPopulation = defaultP1Population
         return getDefaultPopulation.lower()
     else:
-        # Default population format is invalid, retry
-        print(f'')
-        print(f'*************************************************************')
-        print(f'Error: The format of the population is invalid, please retry.')
-        print(f'*************************************************************')
-        print(f'')
-        getDefaultPopulation = getDefaultPopulation()
+        if re.match(guidFormat,getDefaultPopulation):
+            print(f'')
+            return getDefaultPopulation.lower()
+        else:
+            # Default population format is invalid, retry
+            print(f'')
+            print(f'*************************************************************')
+            print(f'Error: The format of the population is invalid, please retry.')
+            print(f'*************************************************************')
+            print(f'')
+            getDefaultPopulation = getDefaultPopulation()
 
 def writeConfigFile(version, workingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, userFile, forcedPasswordChange, defaultPopulation):
     # *********
@@ -432,7 +613,7 @@ def main():
     p1ClientId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     p1ClientSecret = "?"
     p1CredsB64 = ""
-    p1ClientType = "basic"
+    p1ClientType = "failed"
     p1ClientTest = "false"
     tokenRefresh = 30
     userFile = "users.csv"
@@ -444,14 +625,16 @@ def main():
 
     printWelcome(version)
     getConfigFileName(workingDirectory)
-    while (p1ClientTest == "false"):
+    while (p1ClientTest == "false") and \
+          (p1ClientType == "failed"):
         p1Environment = getP1Environment(p1Environment, guidFormat)
         p1Geography = getP1Geo()
         p1ClientId = getP1ClientId(p1ClientId, guidFormat)
         p1ClientSecret = getP1ClientSecret(p1ClientSecret)
-        p1ClientType = getP1ClientType()
-        p1ClientTest, p1AccessToken = performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
-    tokenRefresh = getTokenRefreshDuration()
+        p1ClientType, p1AccessToken = getP1ClientType(p1ClientId, p1ClientSecret, p1Geography, p1Environment)
+        if (p1ClientType != "failed"):
+            #p1ClientTest, p1AccessToken = performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+            tokenRefresh = getTokenRefreshDuration()
     userFile = getCsvFileName()
     p1Attributes = getP1UserAttributes(p1AccessToken, p1Environment, p1Geography)
     while (validCsvHeaders == "false"):
@@ -459,7 +642,7 @@ def main():
     printMappingIntro()
     checkHeadersVsAttributes(csvHeaders, p1Attributes)
     forcedPasswordChange = getForcedPasswordChange()
-    defaultPopulation = getDefaultPopulation(defaultPopulation, guidFormat)
+    defaultPopulation = getDefaultPopulation(p1AccessToken, p1Environment, p1Geography, defaultPopulation, guidFormat)
     writeConfigFile(version, workingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, userFile, forcedPasswordChange, defaultPopulation)
     closeConfigurator(workingDirectory)
 
