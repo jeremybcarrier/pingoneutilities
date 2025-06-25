@@ -11,7 +11,7 @@
 # get access token from P1*
 # read 100 lines of csv*
 # import 100 users*
-# check to make sure we haven't crossed 100tps, then repeat
+# check to make sure we haven't crossed 100tps, thread as needed
 # log everything
 
 import configparser
@@ -230,7 +230,7 @@ def readCsvHeaders(csvPath):
     print(f'')
 
     try:
-        with open(csvPath, 'r', newline='') as csvFile:
+        with open(csvPath, 'r', newline='', encoding='utf-8-sig') as csvFile:
             csvFileReader = csv.reader(csvFile)
             headers = next(csvFileReader)
     except Exception as e:
@@ -433,8 +433,7 @@ def main():
     p1At = ""
     p1DefaultPopulation = ""
     p1PasswordReset = False
-    threads= []
-    
+       
     
     printWelcome(version)
 
@@ -452,6 +451,7 @@ def main():
             headers = next(csvFileReader)
             while not endOfCsv:
                 csvRows = []
+                threads = []
                 numRead = 0
                 numRead, csvRows = readNext100(csvFileReader)
                 if numRead < 100:
@@ -468,5 +468,9 @@ def main():
     except Exception as e:
         print(f'Error reading CSV file: {e}')
         quit()
+
+    ##todo: add in token refresh logic
+    ##todo: log start, finish, and total time in log file
+    ##todo: create mfa tool
 
 main()
