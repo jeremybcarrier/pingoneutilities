@@ -452,7 +452,7 @@ def validateCsvHeaders(userFile):
     readCsvHeaders = []
 
     try:
-        with open(userFile, 'r', newline='') as csvFile:
+        with open(userFile, 'r', newline='', encoding='utf-8-sig') as csvFile:
             csvFileReader = csv.reader(csvFile)
             csvFileHeaders = next(csvFileReader)
     except Exception as csvException:
