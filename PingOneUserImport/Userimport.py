@@ -22,6 +22,7 @@ import csv
 from ratelimit import limits, sleep_and_retry
 import logging
 import threading
+import time
 
 logger = logging.basicConfig(filename='P1ImportUser.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
@@ -29,12 +30,20 @@ def printWelcome(version):
     #######
     # Print the welcome message
     #######
+
+    startTime = int(time.time() * 1000) 
     
     print(f'')
     print(f'********************************************')
     print(f'PingOne User Import Utility - version {version}')
     print(f'********************************************')
     print(f'')
+    print(f'Actions will be written to the log file P1ImportUser.log')
+    print(f'')
+    logging.info(f"PingOne User Import Utility - version {version}")
+    logging.info(f"Starting import tool: {startTime}")
+
+    return startTime
 
 def readConfigurationFile(workingDirectory, configVersion, configWorkingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, p1DefaultPopulation, p1PasswordReset, csvPath):
     #######
@@ -44,6 +53,7 @@ def readConfigurationFile(workingDirectory, configVersion, configWorkingDirector
 
     print(f'Reading configuration file: {workingDirectory}/P1ImportUser.cfg')
     print(f'')
+    logging.info(f"Reading config file: {workingDirectory}/P1ImportUser.cfg")
     
     if(os.path.isfile('P1ImportUser.cfg')):
         try:
@@ -51,6 +61,7 @@ def readConfigurationFile(workingDirectory, configVersion, configWorkingDirector
             configFile.read('P1ImportUser.cfg')
         except Exception as e:
             print("Error reading configuration file: ", e)
+            logging.error(f"Error reading configuration file: {e}")
             quit()
 
         if "General" in configFile.sections():
@@ -60,9 +71,11 @@ def readConfigurationFile(workingDirectory, configVersion, configWorkingDirector
                 configWorkingDirectory = configFile["General"]["workingdirectory"]
             else:
                 print("Error: Missing required fields in General section of configuration file - please re-run configuration utility.")
+                logging.error(f"Missing required fields in General section of configuration file - please re-run configuration utility.")
                 quit()
         else:
             print("Error: Missing General section in configuration file - please re-run configuration utility.")
+            logging.error(f"Missing General section in configuration file - please re-run configuration utility.")
             quit()
 
         if "P1Config" in configFile.sections():
@@ -79,12 +92,14 @@ def readConfigurationFile(workingDirectory, configVersion, configWorkingDirector
                 p1ClientType = configFile["P1Config"]["p1clienttype"]
                 p1DefaultPopulation = configFile["P1Config"]["defaultpopulation"]
                 p1PasswordReset = configFile["P1Config"]["forcedpasswordchange"]
-                tokenRefresh = configFile["P1Config"]["tokenrefresh"]
+                tokenRefresh = int(configFile["P1Config"]["tokenrefresh"])
             else:
                 print("Error: Missing required fields in P1Config section of configuration file - please re-run configuration utility.")
+                logging.error(f"Missing required fields in P1Config section of configuration file - please re-run configuration utility.")
                 quit()
         else:
             print("Error: Missing P1Config section in configuration file - please re-run configuration utility.")
+            logging.error(f"Missing P1Config section in configuration file - please re-run configuration utility.")
             quit()
 
         if "CSV" in configFile.sections():
@@ -92,15 +107,19 @@ def readConfigurationFile(workingDirectory, configVersion, configWorkingDirector
                 csvPath = configFile["CSV"]["csv path"]
             else:
                 print("Error: Missing required fields in CSV section of configuration file - please re-run configuration utility.")
+                logging.error(f"Missing required fields in CSV section of configuration file - please re-run configuration utility.")
                 quit()
         else:
             print("Error: Missing CSV section in configuration file - please re-run configuration utility.")
+            logging.error(f"Missing CSV section in configuration file - please re-run configuration utility.")
             quit()
     else:
         print("Error: Configuration file not found - please run configuration utility to create the configuration file.")
+        logging.error(f"Configuration file not found - please run configuration utility to create the configuration file.")
         quit()
 
     print(f'Configuration file read successfully.')
+    logging.info(f"Configuration file read successfully.")
     print(f'')
     return configVersion, configWorkingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, p1DefaultPopulation, p1PasswordReset, csvPath
 
@@ -112,9 +131,11 @@ def checkWorkingDirectory(workingDirectory, configWorkingDirectory):
     if(workingDirectory != configWorkingDirectory):
         print(f'Error: Working directory {workingDirectory} does not match configured working directory {configWorkingDirectory}.')
         print(f'Please change to the correct working directory and re-run the utility.')
+        logging.error(f"Working directory {workingDirectory} does not match configured working directory {configWorkingDirectory}.")
         quit()
     else:
         print(f'Working directory validated - matches configuration file: {workingDirectory}')
+        logging.info(f"Working directory validated - matches configuration file: {workingDirectory}")
         print(f'')
 
 def checkVersion(configVersion, version):
@@ -125,9 +146,11 @@ def checkVersion(configVersion, version):
     if(configVersion != version):
         print(f'Error: Configuration file version {configVersion} does not match utility version {version}.')
         print(f'Please re-run the configuration utility to update the configuration file.')
+        logging.error(f"Configuration file version {configVersion} does not match utility version {version}.")
         quit()
     else:
         print(f'Configuration file version validated - matches configuration version: {version}')
+        logging.info(f"Configuration file version validated - matches configuration version: {version}")
         print(f'')
 
 def convertCreds(p1ClientId, p1ClientSecret):
@@ -148,6 +171,7 @@ def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1
 
     print(f'')
     print(f'Checking client credentials with PingOne.')
+    logging.info(f"Checking client credentials with PingOne.")
     print(f'')
 
     # Call P1 token endpoint to get an access token with basic encoding
@@ -163,18 +187,21 @@ def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1
             hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
             if hostCheckResult.status_code == 200:
                 print(f"Client connection validated.")
+                logging.info(f"Client connection validated.")
                 print(f'')
             else:
                 print(f'')
                 print(f"****************************************************************************************************************************")
                 print(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
                 print(f"****************************************************************************************************************************")
+                logging.error(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
                 print(f'')
         except requests.exceptions.RequestException:
             print(f'')
             print(f"****************************************************************************************************************************")
             print(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
             print(f"****************************************************************************************************************************")
+            logging.error(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
             print(f'')
 
     # Call P1 token endpoint to get an access token with post encoding
@@ -190,18 +217,21 @@ def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1
             hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
             if hostCheckResult.status_code == 200:
                 print(f"Client connection validated.")
+                logging.info(f"Client connection validated.")
                 print(f'')
             else:
                 print(f'')
                 print(f'****************************************************************************************************************************')
                 print(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
                 print(f'****************************************************************************************************************************')
+                logging.error(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
                 print(f'')
         except requests.exceptions.RequestException:
             print(f'')
             print(f'****************************************************************************************************************************')
             print(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
             print(f'****************************************************************************************************************************')
+            logging.error(f"Failed to connect to PingOne client with provided parameters.  Please check your worker or re-run the configuration utility.")
             print(f'')  
 
 def ensureCsvExists(csvPath):
@@ -210,13 +240,16 @@ def ensureCsvExists(csvPath):
     #######
 
     print(f'Checking for CSV file: {csvPath}')
+    logging.info(f"Checking for CSV file: {csvPath}")
     print(f'')
 
     if(os.path.isfile(csvPath)):
         print(f'CSV file found: {csvPath}')
+        logging.info(f"CSV file found: {csvPath}")
         print(f'')
     else:
         print(f'Error: CSV file not found at {csvPath}. Please re-run the configuration utility.')
+        logging.error(f"CSV file not found at {csvPath}. Please re-run the configuration utility.")
         quit()
 
 def readCsvHeaders(csvPath):
@@ -227,6 +260,7 @@ def readCsvHeaders(csvPath):
     csvHeaders = []
 
     print(f'Reading CSV file headers from: {csvPath}')
+    logging.info(f"Reading CSV file headers from: {csvPath}")
     print(f'')
 
     try:
@@ -235,6 +269,7 @@ def readCsvHeaders(csvPath):
             headers = next(csvFileReader)
     except Exception as e:
         print(f'Error reading CSV file: {e}')
+        logging.error(f"Error reading CSV file: {e}")
         quit()
 
     for header in headers:
@@ -247,7 +282,10 @@ def getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType
     # Get the access token from PingOne
     #######
 
-    print(f'Getting access token from PingOne.')
+    tokenTime = int(time.time() * 1000)
+
+    print(f'Getting access token from PingOne at {tokenTime}.')
+    logging.info(f"Getting access token from PingOne at {tokenTime}.")
     print(f'')
 
     if p1ClientType == "basic":
@@ -270,12 +308,14 @@ def getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType
         response = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token", headers=requestHeaders, data=requestBody)
         if response.status_code == 200:
             responseJson = response.json()
-            return responseJson['access_token']
+            return responseJson['access_token'], tokenTime
         else:
             print(f'Error getting access token: {response.status_code} - {response.text}')
+            logging.error(f"Error getting access token: {response.status_code} - {response.text}")   
             quit()
     except requests.exceptions.RequestException as e:
         print(f'Error connecting to PingOne: {e}')
+        logging.error(f"Error connecting to PingOne: {e}")
         quit()
 
 def readNext100(csvReader):
@@ -299,6 +339,7 @@ def readNext100(csvReader):
             break
         except Exception as e:
             print(f'Error reading CSV file: {e}')
+            logging.error(f"Error reading CSV file: {e}")
             notEof = False
             break
 
@@ -334,7 +375,7 @@ def importUser(csvRow, csvHeaders, p1Geography, p1Environment, p1AT, p1DefaultPo
     # Import one user into PingOne
     #######
 
-    print("in import")
+    #print("in import")
 
     #translationTable = str.maketrans({'\\':'\\\\','\"':'\\\"'})
 
@@ -390,10 +431,8 @@ def importUser(csvRow, csvHeaders, p1Geography, p1Environment, p1AT, p1DefaultPo
     requestHeaders['Content-Type'] = 'application/vnd.pingidentity.user.import+json'
     requestBody = user
 
-    #print(requestHeaders)
-    #print(requestBody)
-    #print(f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/users")
 
+    
     try:
         createResponse = requests.post(f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/users", headers=requestHeaders, json=requestBody)
         if createResponse.status_code == 201:
@@ -404,14 +443,19 @@ def importUser(csvRow, csvHeaders, p1Geography, p1Environment, p1AT, p1DefaultPo
         logging.error(f"Error processing user {user['username']} - unable to continue: {e}")
         quit()
 
-    #print(user)
-    #logging.info(f"Importing user: {user['username']}")
-    ###****start here****###
-    # create json object of user
-    # import into p1
-    # set password for user?
+def printEnding(startTime, endTime):
+    #######
+    # Print the ending message
+    #######
 
+    print(f'PingOne User Import Utility - Ending')
     print(f'')
+    logging.info(f"Ending import tool: {endTime}")
+    
+    totalTime = endTime - startTime
+    print(f'Total time taken: {totalTime} ms')
+    logging.info(f"Total time taken: {totalTime} ms")
+    
 
 def main():
 
@@ -433,23 +477,29 @@ def main():
     p1At = ""
     p1DefaultPopulation = ""
     p1PasswordReset = False
-       
+    startTime = 0
+    lastTokenTime = 0
+    nextToken = 0
+    totalProcessed = 0
     
-    printWelcome(version)
-
-
+    startTime = printWelcome(version)
     configVersion, configWorkingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, p1DefaultPopulation, p1PasswordReset, csvPath = readConfigurationFile(workingDirectory, configVersion, configWorkingDirectory, p1Environment, p1Geography, p1ClientId, p1ClientSecret, p1ClientType, tokenRefresh, p1DefaultPopulation, p1PasswordReset, csvPath)
     checkWorkingDirectory(workingDirectory, configWorkingDirectory)
     checkVersion(configVersion, version)
     performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
     ensureCsvExists(csvPath)
     csvHeaders, csvReader = readCsvHeaders(csvPath)
-    p1At = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+    p1At, lastTokenTime = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+    nextToken = lastTokenTime + (tokenRefresh * 60 * 1000)
     try:
         with open(csvPath, 'r', newline='') as csvFile:
             csvFileReader = csv.reader(csvFile)
             headers = next(csvFileReader)
             while not endOfCsv:
+                currentTime = int(time.time() * 1000)
+                if currentTime > nextToken:
+                    p1At, lastTokenTime = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+                    nextToken = lastTokenTime + (tokenRefresh * 60 * 1000)
                 csvRows = []
                 threads = []
                 numRead = 0
@@ -465,10 +515,14 @@ def main():
                     t.start()
                 for t in threads:
                     t.join()
+                totalProcessed += numRead
+                print(f'Processed: {totalProcessed}')
     except Exception as e:
         print(f'Error reading CSV file: {e}')
+        logging.error(f"Error reading CSV file: {e}")
         quit()
-
+    endTime = int(time.time() * 1000)
+    printEnding(startTime, endTime)
     ##todo: add in token refresh logic
     ##todo: log start, finish, and total time in log file
     ##todo: create mfa tool
