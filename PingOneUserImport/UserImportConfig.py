@@ -1,5 +1,5 @@
 # PingOne Import Tool - Configurator
-# Last Update: June 16, 2025
+# Last Update: June 26, 2025
 # Authors: Matt Pollicove, Jeremy Carrier
 
 import os
@@ -7,7 +7,6 @@ import re
 import requests
 import base64
 import csv
-#import getpass
 import pwinput
 import configparser
 
@@ -91,11 +90,10 @@ def getP1ClientId(p1ClientId, guidFormat):
         print(f'')
         getClientId = getP1ClientId(p1ClientId, guidFormat)
 
-def getP1ClientSecret(p1ClientSecret):
+def getP1ClientSecret():
     # *********
     #Prompts the user for the PingOne Client Secret securely.
     # *********
-    #getClientSecret = getpass.getpass(f'What is your PingOne Client Secret? :')
     getClientSecret = pwinput.pwinput(prompt='What is your PingOne Client Secret? :', mask='*')
     print(f'')
     return getClientSecret
@@ -168,9 +166,6 @@ def performClientTestPost(p1ClientId, p1ClientSecret, p1Geography, p1Environment
     requestBody['grant_type'] = 'client_credentials'
 
     try:
-        #print (requestHeaders)
-        #print (requestBody)
-        #print (f"https://auth.pingone{p1Geography}/{p1Environment}/as/token")
         hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
         if hostCheckResult.status_code == 200:
             print(f"Client connection validated with POST auth.")
@@ -212,81 +207,6 @@ def getP1ClientType(p1ClientId, p1ClientSecret, p1Geography, p1Environment):
             print(f'Error: Failed to connect to client with both BASIC and POST.  Please re-enter client details and ensure your worker client is enabled.')
             print(f'**************************************************************************************************************************************')
             return "failed",""
-
-"""
-
-def performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType):
-    # *********
-    # Attempts to authenticate with PingOne using the provided credentials and client type.
-    # Returns a tuple of ("true"/"false", access_token or empty string).
-    # *********
-    requestHeaders = ""
-
-    print(f'')
-    print(f'Checking client credentials with PingOne.')
-    print(f'')
-
-    # Call P1 token endpoint to get an access token with basic encoding
-    if p1ClientType == "basic":
-        p1CredsB64 = convertCreds(p1ClientId, p1ClientSecret)
-        requestHeaders = {}
-        requestHeaders['Authorization'] = 'Basic ' + p1CredsB64
-        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
-        requestBody = {'grant_type':'client_credentials'}
-
-
-        try:
-            hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
-            if hostCheckResult.status_code == 200:
-                print(f"Client connection validated.")
-                print(f'')
-                return "true", hostCheckResult.json()['access_token']
-            else:
-                print(f'')
-                print(f"***************************************************************************************************")
-                print(f"Failed to connect to PingOne client with provided parameters.  Please provide client details again.")
-                print(f"***************************************************************************************************")
-                print(f'')
-                return "false",""
-        except requests.exceptions.RequestException:
-            print(f'')
-            print(f"***************************************************************************************************")
-            print(f"Failed to connect to PingOne client with provided parameters.  Please provide client details again.")
-            print(f"***************************************************************************************************")
-            print(f'')
-            return "false",""
-
-    # Call p1 token endpoint to get an access token with post encoding
-    if p1ClientType == "post":
-        requestHeaders = {}
-        requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
-        requestBody = {}
-        requestBody['client_id'] = p1ClientId
-        requestBody['client_secret'] = p1ClientSecret
-        requestBody['grant_type'] = 'client_credentials'
-
-        try:
-            hostCheckResult = requests.post(f"https://auth.pingone{p1Geography}/{p1Environment}/as/token",headers=requestHeaders,data=requestBody)
-            if hostCheckResult.status_code == 200:
-                print(f"Client connection validated.")
-                print(f'')
-                return "true", hostCheckResult.json()['access_token']
-            else:
-                print(f'')
-                print(f'***************************************************************************************************')
-                print(f"Failed to connect to PingOne client with provided parameters.  Please provide client details again.")
-                print(f'***************************************************************************************************')
-                print(f'')
-                return "false",""
-        except requests.exceptions.RequestException:
-            print(f'')
-            print(f'***************************************************************************************************')
-            print(f"Failed to connect to PingOne client with provided parameters.  Please provide client details again.")
-            print(f'***************************************************************************************************')
-            print(f'')  
-            return "false",""
-
-"""
 
 def getTokenRefreshDuration():
     # *********
@@ -538,7 +458,6 @@ def getP1Populations(p1At, p1Environment, p1Geography):
         getPopulations = requests.get(f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/populations",headers=requestPopHeaders)
         if getPopulations.status_code == 200:
             for p1Population in getPopulations.json()['_embedded']['populations']:
-                #p1PopulationIds.append(p1Population['id'])
                 print(f' - ({p1Population["name"]}) {p1Population["id"]} ')
                 if firstPopulation == "":
                     firstPopulation = p1Population['id']
@@ -598,7 +517,7 @@ def closeConfigurator(workingDirectory):
     # *********
     # Prints a message indicating that configuration is complete and shows the config file path.
     # *********
-    print("All configuration compelete - the configuration file has been written to :")
+    print("All configuration complete - the configuration file has been written to :")
     print(workingDirectory + '/P1ImportUser.cfg')
 
 def main():
@@ -633,7 +552,6 @@ def main():
         p1ClientSecret = getP1ClientSecret(p1ClientSecret)
         p1ClientType, p1AccessToken = getP1ClientType(p1ClientId, p1ClientSecret, p1Geography, p1Environment)
         if (p1ClientType != "failed"):
-            #p1ClientTest, p1AccessToken = performClientTest(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
             tokenRefresh = getTokenRefreshDuration()
     userFile = getCsvFileName()
     p1Attributes = getP1UserAttributes(p1AccessToken, p1Environment, p1Geography)

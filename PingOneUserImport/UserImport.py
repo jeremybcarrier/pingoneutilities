@@ -1,18 +1,6 @@
 # PingOne Import Tool
-# Last Update: June 17, 2025
+# Last Update: June 26, 2025
 # Authors: Matt Pollicove, Jeremy Carrier
-
-# Open config file*
-# check working directory*
-# check version*
-# test P1 client*
-# check CSV file*
-# read headers of csv and create array of headers*
-# get access token from P1*
-# read 100 lines of csv*
-# import 100 users*
-# check to make sure we haven't crossed 100tps, thread as needed
-# log everything
 
 import configparser
 import requests
@@ -350,10 +338,7 @@ def nestedUserPart(currentUserPart, partIndex, parts, attributeValue):
     # Handle nested user parts
     #######
 
-    #translationTable = str.maketrans({'\\':'\\\\','\"':'\\\"'})
-
     if partIndex < len(parts):
-        #print(partIndex, " ", len(parts))
         part = parts[partIndex]
         if part not in currentUserPart:
             currentUserPart[part] = {}
@@ -365,7 +350,6 @@ def nestedUserPart(currentUserPart, partIndex, parts, attributeValue):
             return currentUserPart
     else:
         currentUserPart = attributeValue
-        #return currentUserPart.translate(translationTable)
         return currentUserPart
 
 @sleep_and_retry
@@ -375,72 +359,68 @@ def importUser(csvRow, csvHeaders, p1Geography, p1Environment, p1AT, p1DefaultPo
     # Import one user into PingOne
     #######
 
-    #print("in import")
-
-    #translationTable = str.maketrans({'\\':'\\\\','\"':'\\\"'})
-
     user = {}
-    for headerIndex, header in enumerate(csvHeaders):
-        if (header != "password") and \
-           (header != "population") and \
-           (header != "enabled"):
-            if len(header.split('.')) > 1:
-                # Handle nested headers
-                parts = header.split('.')
-                partIndex = 0
-                if parts[0] not in user:
-                    user[parts[0]] = {}
-                returnedPart = nestedUserPart(user[parts[0]], partIndex+1, parts, csvRow[headerIndex])
-                if returnedPart != '':
-                    user[parts[0]] = returnedPart
-            else:
-                #user[header] = (csvRow[csvHeaders.index(header)].strip()).translate(translationTable)
-                if(csvRow[csvHeaders.index(header)].strip() != ''):
-                    user[header] = csvRow[csvHeaders.index(header)].strip()
 
+    # Precomputing indexes to prevent repeated lookups
+    header_indexes = {header: idx for idx, header in enumerate(csvHeaders)}
+    special_fields = {"password", "population", "enabled"}
 
-    # handling enabled/disabled user
-    if "enabled" in csvHeaders:
-        if (csvRow[csvHeaders.index("enabled")].strip()).lower() == "true":
-            user["enabled"] = True
+    # Build user object, handling nested fields
+    for header, idx in header_indexes.items():
+        if header in special_fields:
+            continue
+        value = csvRow[idx].strip()
+        if not value:
+            continue
+        parts = header.split('.')
+        if len(parts) == 1:
+            user[header] = value
         else:
-            user["enabled"] = False
-
-    # handling default population
-    if "population" in csvHeaders:
-        user["population"] = {}
-        user["population"]["id"] = csvRow[csvHeaders.index("population")].strip()
-    else:
-        user["population"] = {}
-        user["population"]["id"] = p1DefaultPopulation
-
-    # handle password reset
-    if "password" in csvHeaders:
-        user["password"] = {}
-        user["password"]["value"] = csvRow[csvHeaders.index("password")].strip()
-        if(p1PasswordReset == "true"):
-            user["password"]["forceChange"] = True
-        else:
-            user["password"]["forceChange"] = False
+            d = user
+            for part in parts[:-1]:
+                if part not in d or not isinstance(d[part], dict):
+                    d[part] = {}
+                d = d[part]
+            d[parts[-1]] = value
 
 
-    # Call P1
+    # Handle enabled/disabled user
+    enabled_idx = header_indexes.get("enabled")
+    if enabled_idx is not None:
+        user["enabled"] = csvRow[enabled_idx].strip().lower() == "true"
 
-    requestHeaders = {}
-    requestHeaders['Authorization'] = 'Bearer ' + p1AT
-    requestHeaders['Content-Type'] = 'application/vnd.pingidentity.user.import+json'
-    requestBody = user
+    # Handle population
+    pop_idx = header_indexes.get("population")
+    user["population"] = {"id": csvRow[pop_idx].strip() if pop_idx is not None and csvRow[pop_idx].strip() else p1DefaultPopulation}
 
+    # Handle password and forceChange
+    pwd_idx = header_indexes.get("password")
+    if pwd_idx is not None and csvRow[pwd_idx].strip():
+        user["password"] = {
+            "value": csvRow[pwd_idx].strip(),
+            "forceChange": p1PasswordReset == "true"
+        }
 
-    
+    # Prepare request
+    requestHeaders = {
+        'Authorization': f'Bearer {p1AT}',
+        'Content-Type': 'application/vnd.pingidentity.user.import+json'
+    }
+
     try:
-        createResponse = requests.post(f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/users", headers=requestHeaders, json=requestBody)
+        createResponse = requests.post(
+            f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/users",
+            headers=requestHeaders,
+            json=user
+        )
+        username = user.get('username', '[unknown]')
         if createResponse.status_code == 201:
-            logging.info(f"User imported: {user['username']}")
+            logging.info(f"User imported: {username}")
         else:
-            logging.error(f"Failed to import user {user['username']}: {createResponse.status_code} - {createResponse.text}")
+            logging.error(f"Failed to import user {username}: {createResponse.status_code} - {createResponse.text}")
     except Exception as e:
-        logging.error(f"Error processing user {user['username']} - unable to continue: {e}")
+        username = user.get('username', '[unknown]')
+        logging.error(f"Error processing user {username} - unable to continue: {e}")
         quit()
 
 def printEnding(startTime, endTime):
@@ -509,8 +489,6 @@ def main():
                 for csvRow in csvRows:
                     t = threading.Thread(target=importUser, args=(csvRow, csvHeaders, p1Geography, p1Environment, p1At, p1DefaultPopulation, p1PasswordReset))
                     threads.append(t)
-                    #importUser(csvRow, csvHeaders, p1Geography, p1Environment, p1At, p1DefaultPopulation, p1PasswordReset)
-                ####
                 for t in threads:
                     t.start()
                 for t in threads:
@@ -523,8 +501,5 @@ def main():
         quit()
     endTime = int(time.time() * 1000)
     printEnding(startTime, endTime)
-    ##todo: add in token refresh logic
-    ##todo: log start, finish, and total time in log file
-    ##todo: create mfa tool
 
 main()
