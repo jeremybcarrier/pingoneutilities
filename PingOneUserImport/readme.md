@@ -110,24 +110,24 @@ This is the actual script for importing.  It will:
 <a name="anchor-libraries"></a>
 ## Python Libraries Used
 1. configparser [https://docs.python.org/3/library/configparser.html]
-  - Handles reading and writing the configuration file
+   - Handles reading and writing the configuration file
 2. requests [https://pypi.org/project/requests/]
-  - Handles REST API calls to PingOne endpoints
+   - Handles REST API calls to PingOne endpoints
 3. os [https://docs.python.org/3/library/os.html]
-  - Gets working diretory, searches for CSV files in the working directory, and ensures that the config and CSV file are present
+   - Gets working diretory, searches for CSV files in the working directory, and ensures that the config and CSV file are present
 4. base64 [https://docs.python.org/3/library/base64.html]
-  - Handles encoding of client ID and secret for BASIC authentication
+   - Handles encoding of client ID and secret for BASIC authentication
 5. csv [https://docs.python.org/3/library/csv.html]
-  - Handles reading the CSV file
+   - Handles reading the CSV file
 6. ratelimit [https://pypi.org/project/ratelimit/]
-  - Ensures the script doesn't exceed the maximum transactions per second of PingOne APIs
+   - Ensures the script doesn't exceed the maximum transactions per second of PingOne APIs
 7. logging [https://docs.python.org/3/library/logging.html]
-  - Write the log file during import
+   - Write the log file during import
 8. threading [https://docs.python.org/3/library/threading.html]
-  - Provides parallelism during import
+   - Provides parallelism during import
 9. time [https://docs.python.org/3/library/time.html]
-  - Allows the script to get system time during operation for reporting and ensuring token refresh
+   - Allows the script to get system time during operation for reporting and ensuring token refresh
 10. re [https://docs.python.org/3/library/re.html]
-  - Provides regex support to ensure inputs during configuration are in allowable formats
+    - Provides regex support to ensure inputs during configuration are in allowable formats
 11. pwinput [https://pypi.org/project/pwinput/]
-  - Hides the content of your client secret when you enter it
+    - Hides the content of your client secret when you enter it
