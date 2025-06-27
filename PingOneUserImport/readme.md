@@ -102,4 +102,4 @@ This is the actual script for importing.  It will:
 ## How to Use
 1) Ensure you have Python 3 installed
 2) Download this repository to whatever working folder you choose
-3) Ensure you have completed the prequisites(#anchor-prerequisites)
+3) Ensure you have completed the [prequisites](#anchor-prerequisites)
