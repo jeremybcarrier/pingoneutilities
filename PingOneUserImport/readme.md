@@ -100,6 +100,34 @@ This is the actual script for importing.  It will:
 13. Update the screen with user imports, 100 at a time
 
 ## How to Use
-1) Ensure you have Python 3 installed
-2) Download this repository to whatever working folder you choose
-3) Ensure you have completed the [prequisites](#anchor-prerequisites)
+1. Ensure you have Python 3 installed with necessary [libraries](#anchor-libraries)
+2. Download this repository to whatever working folder you choose
+3. Ensure you have completed the [prequisites](#anchor-prerequisites)
+4. Run the *UserImportConfig.py* script in your working directory
+5. Run the *UserImport.py* script after the configuration is complete
+6. Review the results in your *P1ImportUser.log* file
+
+<a name="anchor-libraries"></a>
+## Python Libraries Used
+1. configparser [https://docs.python.org/3/library/configparser.html]
+  - Handles reading and writing the configuration file
+2. requests [https://pypi.org/project/requests/]
+  - Handles REST API calls to PingOne endpoints
+3. os [https://docs.python.org/3/library/os.html]
+  - Gets working diretory, searches for CSV files in the working directory, and ensures that the config and CSV file are present
+4. base64 [https://docs.python.org/3/library/base64.html]
+  - Handles encoding of client ID and secret for BASIC authentication
+5. csv [https://docs.python.org/3/library/csv.html]
+  - Handles reading the CSV file
+6. ratelimit [https://pypi.org/project/ratelimit/]
+  - Ensures the script doesn't exceed the maximum transactions per second of PingOne APIs
+7. logging [https://docs.python.org/3/library/logging.html]
+  - Write the log file during import
+8. threading [https://docs.python.org/3/library/threading.html]
+  - Provides parallelism during import
+9. time [https://docs.python.org/3/library/time.html]
+  - Allows the script to get system time during operation for reporting and ensuring token refresh
+10. re [https://docs.python.org/3/library/re.html]
+  - Provides regex support to ensure inputs during configuration are in allowable formats
+11. pwinput [https://pypi.org/project/pwinput/]
+  - Hides the content of your client secret when you enter it
