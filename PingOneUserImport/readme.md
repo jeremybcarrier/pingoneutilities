@@ -48,6 +48,7 @@ This toolkit is for bulk importing users from a CSV file into PingOne.
   - username
 - Additionally, any custom string attributes you add to the schema are supported
 
+<a name="anchor-prerequisites"></a>
 ## Prerequisites
 Before you begin, you should:
 - Have a working PingOne environment that is not the default Administrators environment
@@ -97,3 +98,8 @@ This is the actual script for importing.  It will:
 11. Ensure that the tool does not attempt to exceed the PingOne API rate limit of 100 API calls per second per IP address
 12. Write the status of the import to a log file
 13. Update the screen with user imports, 100 at a time
+
+## How to Use
+1) Ensure you have Python 3 installed
+2) Download this repository to whatever working folder you choose
+3) Ensure you have completed the prequisites(#anchor-prerequisites)
