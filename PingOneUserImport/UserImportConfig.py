@@ -549,7 +549,7 @@ def main():
         p1Environment = getP1Environment(p1Environment, guidFormat)
         p1Geography = getP1Geo()
         p1ClientId = getP1ClientId(p1ClientId, guidFormat)
-        p1ClientSecret = getP1ClientSecret(p1ClientSecret)
+        p1ClientSecret = getP1ClientSecret()
         p1ClientType, p1AccessToken = getP1ClientType(p1ClientId, p1ClientSecret, p1Geography, p1Environment)
         if (p1ClientType != "failed"):
             tokenRefresh = getTokenRefreshDuration()
