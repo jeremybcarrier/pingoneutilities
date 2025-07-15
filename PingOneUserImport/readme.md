@@ -123,7 +123,7 @@ This is the actual script for importing.  It will:
    - Ensures the script doesn't exceed the maximum transactions per second of PingOne APIs
 7. logging [https://docs.python.org/3/library/logging.html]
    - Write the log file during import
-8. threading [https://docs.python.org/3/library/threading.html]
+8. concurrent.futures [https://docs.python.org/3/library/concurrent.futures.html]
    - Provides parallelism during import
 9. time [https://docs.python.org/3/library/time.html]
    - Allows the script to get system time during operation for reporting and ensuring token refresh
