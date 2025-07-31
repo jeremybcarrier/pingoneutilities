@@ -1,5 +1,5 @@
 # PingOne Bulk Delete Tool
-# Last Update: July 15, 2025
+# Last Update: July 31, 2025
 # Authors: Jeremy Carrier
 
 import requests
@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import pwinput
+from datetime import datetime, timedelta
 
 logFormat = logging.Formatter("%(asctime)s - %(message)s")
 
@@ -268,6 +269,7 @@ def getDeleteType():
     print(f'1) Delete all users in the PingOne environment')
     print(f'2) Delete users in a group in the PingOne environment')
     print(f'3) Delete users whose last login time was before a certain date')
+    print(f'4) Delete users who have not completed an account verification within a certain number of days of account creation')
     print(f'')
 
     deleteType = input(f'Please choose from the list above: ')
@@ -280,7 +282,7 @@ def getDeleteType():
         print(f'')
         deleteType = getDeleteType()
 
-    if deleteType in ['1', '2', '3']:
+    if deleteType in ['1', '2', '3', '4']:
         return deleteType
     else:
         print(f'')
@@ -289,6 +291,66 @@ def getDeleteType():
         print(f'*****************************************************************')
         print(f'')
         deleteType = getDeleteType()
+
+def getGroupSelection(p1At, p1Environment, p1Geography, guidFormat):
+    ######
+    # Get the list of P1 groups from the environment
+    # If <50 groups exist, show them to the user, otherwise force the user to look it up
+    # Get the group selection from the user
+    ######
+
+    requestHeaders = {}
+    requestHeaders['Authorization'] = "Bearer " + p1At
+    requestHeaders['Content-Type'] = 'application/json'
+    requestUrl = f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/groups"
+
+    try:
+        response = requests.get(requestUrl, headers=requestHeaders)
+        if response.status_code == 200:
+            responseJson = response.json()
+            groups = responseJson['_embedded']['groups']
+            if len(groups) < 50:
+                print(f'')
+                print(f'Available groups in PingOne environment {p1Environment}:')
+                for group in groups:
+                    print(f"Group ID: {group['id']}, Group Name: {group['name']}")
+                print(f'')
+                groupId = input(f'Please enter the Group ID you want to delete users from: ')
+                if re.match(guidFormat, groupId):
+                    print(f'')
+                    return groupId.lower()
+                else:
+                    # Group ID format is invalid, retry
+                    print(f'')
+                    print(f'************************************************************')
+                    print(f'Error: The format of the Group ID is invalid, please retry.')
+                    print(f'************************************************************')
+                    print(f'')
+                    groupId = getGroupSelection(p1At, p1Environment, p1Geography, guidFormat)
+            else:
+                print(f'')
+                print(f'You have more than 50 groups in your PingOne environment.')
+                print(f'Please look up the Group ID you want to delete users from and enter it below.')
+                groupId = input(f'Please enter the Group ID you want to delete users from: ')
+                if re.match(guidFormat, groupId):
+                    print(f'')
+                    return groupId.lower()
+                else:
+                    # Group ID format is invalid, retry
+                    print(f'')
+                    print(f'************************************************************')
+                    print(f'Error: The format of the Group ID is invalid, please retry.')
+                    print(f'************************************************************')
+                    print(f'')
+                    groupId = getGroupSelection(p1At, p1Environment, p1Geography, guidFormat)
+        else:
+            print(f'Error getting groups: {response.status_code} - {response.text}')
+            infoLogger.error(f"Error getting groups: {response.status_code} - {response.text}")
+            quit()
+    except requests.exceptions.RequestException as e:
+        print(f'Error connecting to PingOne: {e}')
+        infoLogger.error(f"Error connecting to PingOne: {e}")
+        quit()
 
 def getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType):
     #######
@@ -359,7 +421,82 @@ def getExistingUsercount(p1At, p1Environment, p1Geography):
 
     return currentUserCount
 
-def getUsers(p1At, p1Environment, p1Geography, cursor):    
+def printDurationWarning():
+    ######
+    # Print a warning about the duration of the delete operation
+    ######
+
+    print(f'')
+    print(f'WARNING: This operation may take some time based on the selected delete criteria.')
+    print(f'')
+    understand = input("Proceed? (yes/no): [yes]").strip().lower()
+    
+    if not understand:
+        return True  # Default to yes if no input is provided
+    if understand == 'yes':
+        return True
+    else:
+        print(f'')
+        print(f'Operation cancelled. Please run the tool again when you are ready.')
+        quit()
+
+def getLastLoginTimeSelection():
+    ######
+    # Get last login time selection from user input
+    ######
+    dateFormat = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+
+    print(f'')
+    print(f'This tool will remove users who have not logged in since a specified date.')
+    print(f'Please enter the date and time in the format YYYY-MM-DD (e.g. 2023-07-28).')
+    fullDate = input("Enter the date (YYYY-MM-DD): ")
+    if re.match(dateFormat,fullDate):
+        try:
+            lastYear, lastMonth, lastDay = map(int, fullDate.split('-'))
+            # Validate the date
+            datetime.datetime(lastYear, lastMonth, lastDay)
+            print(f'')
+            print(f'Date validated: {lastYear}-{lastMonth:02d}-{lastDay:02d}.')
+            print(f'')
+            print(f'Do you also want to include users who have never logged in? (yes/no): [yes]')
+            neverLogged = input().strip().lower()
+            if not neverLogged:
+                neverLogged = 'yes'  # Default to yes if no input is provided
+                return lastDay, lastMonth, lastYear, True
+            if neverLogged == 'yes':
+                return lastDay, lastMonth, lastYear, True
+            else:
+                return lastDay, lastMonth, lastYear, False
+        except ValueError:
+            print(f'')
+            print(f'Invalid date format or date does not exist.')
+            lastDay, lastMonth, lastYear = getLastLoginTimeSelection()
+    else:
+        print(f'')
+        print(f'Invalid date format.')
+        lastDay, lastMonth, lastYear = getLastLoginTimeSelection()
+
+def getCreateSelection():
+    ######
+    # Get number of days since account creation to check for verification
+    ######
+
+    print(f'')
+    print(f'This tool will remove users who have not completed an account verification within a specified number of days account creation.')
+    print(f'Please enter the number of days since account creation that an account should be allowed to remain unverified.')
+    numDays = input("Days: [30] ")
+    if not numDays:
+        numDays = "30"
+    else:
+        if not (numDays.isdigit() and int(numDays) > 0):
+            print(f'')
+            print(f'Invalid input. Please enter a positive integer.')
+            numDays = getCreateSelection()
+
+    infoLogger.info(f"User verification check will be performed for accounts created more than {numDays} days ago.")
+    return numDays
+
+def getUsers(p1At, p1Environment, p1Geography, cursor, filter):    
     ######
     # Get page of users in PingOne Environment
     ######
@@ -368,6 +505,8 @@ def getUsers(p1At, p1Environment, p1Geography, cursor):
     requestHeaders['Authorization'] = "Bearer " + p1At
     requestHeaders['Content-Type'] = 'application/json'
     requestUrl = f"https://api.pingone{p1Geography}/v1/environments/{p1Environment}/users"
+    if filter != "":
+        requestUrl += f"?filter={filter}"
     
     if cursor is not None:
         requestUrl = cursor
@@ -395,7 +534,7 @@ def getUsers(p1At, p1Environment, p1Geography, cursor):
         infoLogger.error(f"Error connecting to PingOne: {e}")
         quit()
 
-def deleteUser(user, p1Geography, p1Environment, p1At):
+def deleteUser(user, p1Geography, p1Environment, p1At,):
     ######
     # Deletes a user in PingOne Environment
     ######
@@ -413,7 +552,6 @@ def deleteUser(user, p1Geography, p1Environment, p1At):
             infoLogger.info(f"User {userId} deleted successfully.")
             return True
         else:
-            #print(f'Error deleting user {userId}: {response.status_code} - {response.text}')
             infoLogger.error(f"Error deleting user {userId}")
             detailedFailureLogger.error(f"Failed to delete user {userId}: {response.status_code} - {response.text}")
             return False
@@ -421,6 +559,62 @@ def deleteUser(user, p1Geography, p1Environment, p1At):
         print(f'Error connecting to PingOne: {e}')
         infoLogger.error(f"Error connecting to PingOne: {e}")
         quit()
+
+def deleteUserByLoginDate(user, p1Geography, p1Environment, p1At, msTime, neverLogged):
+    ######
+    # Deletes a user in PingOne Environment
+    ######
+
+    userHasLogged = False
+    shouldDelete = False
+    userLastLogin = 0
+
+    if 'lastSignOn' in user:
+        userHasLogged = True
+        userDatePart = user['lastSignOn']['at'][0:10]
+        dateTime = datetime.strptime(userDatePart, '%Y-%m-%d')
+        dateTimeMs = int(dateTime.timestamp() * 1000)
+
+    if (neverLogged == True) and (userHasLogged == False):
+        shouldDelete = True
+
+    if (neverLogged == False) and (userHasLogged):
+        if msTime < dateTimeMs:
+            shouldDelete = True
+
+    if shouldDelete == True:
+        # User should be deleted
+        infoLogger.info(f"DELETING: user {user['username']} ({user['id']}).")
+        deletingUser = deleteUser(user, p1Geography, p1Environment, p1At)
+        return True
+    else:
+        # User should not be deleted
+        infoLogger.info(f"SKIPPING: user {user['username']} ({user['id']}) does not meet delete criteria.")
+        return False
+
+def deleteUserByVerifyDate(user, p1Geography, p1Environment, p1At, msTime):
+    ######
+    # Deletes a user in PingOne Environment
+    ######
+
+    userStatusUnverified = False
+    shouldDelete = False
+
+    if user['lifecycle']['status'] == 'VERIFICATION_REQUIRED':
+        userStatusUnverified = True
+        createDatePart = user['createdAt'][0:10]
+        createDateTime = datetime.strptime(createDatePart, '%Y-%m-%d')
+        createDateTimeMs = int(createDateTime.timestamp() * 1000)
+        if createDateTimeMs < msTime:
+            infoLogger.info(f"DELETING: User {user['id']} is in VERIFICATION_REQUIRED status and created before {msTime}.")
+            deletingUser = deleteUser(user, p1Geography, p1Environment, p1At)
+            #########DO DELETE#########
+            return True
+        else:
+            infoLogger.info(f"SKIPPING: User {user['id']} is in VERIFICATION_REQUIRED status but created after {msTime}.")
+    else:
+        infoLogger.info(f"SKIPPING: User {user['id']} is not in VERIFICATION_REQUIRED status.")
+        return False
 
 def printEnding(startTime, endTime):
     #######
@@ -435,18 +629,10 @@ def printEnding(startTime, endTime):
     print(f'Total time taken: {totalTime} ms')
     infoLogger.info(f"Total time taken: {totalTime} ms")
 
-
-# Get config info*
-# validate info*
-# do delete
-
-
 def main():
 
     version = "0.1"
     workingDirectory = os.getcwd()
-    #configVersion = ""
-    #configWorkingDirectory = ""
     guidFormat = r"^[a-fA-f0-9]{8}-[a-fA-f0-9]{4}-[a-fA-f0-9]{4}-[a-fA-f0-9]{4}-[a-fA-f0-9]{12}$"
     p1Environment = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     p1Geography = ""
@@ -470,6 +656,13 @@ def main():
     cursor = None
     readCount = 0
     totalProcessed = 0
+    filter = ""
+    specialFilter = False
+    lastYear = 0
+    lastMonth = 0
+    lastDay = 0
+    understandDuration = False
+    numDaysSinceCreate = 0
     
     startTime = printWelcome(version)
     while (p1ClientTest == False) and \
@@ -487,19 +680,71 @@ def main():
     currentUserCount = getExistingUsercount(p1At, p1Environment, p1Geography)
 
     match deleteType:
+        # All P1
         case '1':
+            filter = ""
+            specialFilter = False
+        # P1 Group
+        case '2':
+            groupId = getGroupSelection(p1At, p1Environment, p1Geography, guidFormat)
+            filter = f'memberOfGroups[id eq "{groupId}"]'
+            specialFilter = False
+        # P1 Last Login Date or never logged in
+        case '3':
+            understandDuration = printDurationWarning()
+            if understandDuration == True:
+                # get date, get users who match, include users who have never logged in
+                lastDay, lastMonth, lastYear, neverLogged = getLastLoginTimeSelection()
+                dateObject = datetime.datetime(lastYear, lastMonth, lastDay, 0, 0, 0)
+                msTime = dateObject.timestamp() * 1000
+                print(f'')
+                specialFilter = True
+                try:
+                    while cursor != "":
+                        currentUserList, cursor, readCount = getUsers(p1At, p1Environment, p1Geography, cursor, "")
+                        print(cursor)
+                        currentTime = int(time.time() * 1000)
+                        if currentTime > nextToken:
+                            p1At, lastTokenTime = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+                            nextToken = lastTokenTime + (tokenRefresh * 60 * 1000)
+                        threads = []
+                        for user in currentUserList:
+                            thread = executor.submit(deleteUserByLoginDate, user, p1Geography, p1Environment, p1At, msTime, neverLogged)
+                            threads.append(thread)
+                        for thread in as_completed(threads):
+                            try:
+                                threadResult = thread.result()
+                                if threadResult == True:
+                                    successfulDelete += 1
+                                else:
+                                    failedDelete += 1
+                            except Exception as e:
+                                print(f"Thread generated an exception: {e}")
+                                infoLogger.error(f"Error: Thread generated an exception: {e}")
+                        totalProcessed += readCount
+                except Exception as e:
+                    print(f'Error deleting users: {e}')
+                    infoLogger.error(f"Error deleting users: {e}")
+                    quit()
+        case '4':
+            # Get the number of days since account creation to check for verification
+            numDaysSinceCreate = int(getCreateSelection())
+            today = datetime.now()
+            past_date = today - timedelta(days=numDaysSinceCreate)
+            msTime = past_date.timestamp() * 1000
+            print(f'')
+            specialFilter = True
             try:
                 while cursor != "":
-                    currentUserList, cursor, readCount = getUsers(p1At, p1Environment, p1Geography, cursor)
-                    print(cursor)
+                    currentUserList, cursor, readCount = getUsers(p1At, p1Environment, p1Geography, cursor, "")
+                    #print(cursor)
                     currentTime = int(time.time() * 1000)
                     if currentTime > nextToken:
                         p1At, lastTokenTime = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
                         nextToken = lastTokenTime + (tokenRefresh * 60 * 1000)
                     threads = []
                     for user in currentUserList:
-                        #print(user)
-                        thread = executor.submit(deleteUser, user, p1Geography, p1Environment, p1At)
+                        thread = executor.submit(deleteUserByVerifyDate, user, p1Geography, p1Environment, p1At, msTime)
                         threads.append(thread)
                     for thread in as_completed(threads):
                         try:
@@ -513,16 +758,9 @@ def main():
                             infoLogger.error(f"Error: Thread generated an exception: {e}")
                     totalProcessed += readCount
             except Exception as e:
-                print(f'Error deleting all users: {e}')
-                infoLogger.error(f"Error deleting all users: {e}")
+                print(f'Error deleting users: {e}')
+                infoLogger.error(f"Error deleting users: {e}")
                 quit()
-        case '2':
-            ####START HERE
-            # do specific group
-            print(f'')
-        case '3':
-            # get date, get users who match, include users who have never logged in
-            print(f'')
         case _:
             print(f'')
             print(f'*****************************************************************')
@@ -530,10 +768,37 @@ def main():
             print(f'*****************************************************************')
             print(f'')
 
+    if specialFilter == False:
+        try:
+            while cursor != "":
+                currentUserList, cursor, readCount = getUsers(p1At, p1Environment, p1Geography, cursor, filter)
+                print(cursor)
+                currentTime = int(time.time() * 1000)
+                if currentTime > nextToken:
+                    p1At, lastTokenTime = getP1At(p1ClientId, p1ClientSecret, p1Geography, p1Environment, p1ClientType)
+                    nextToken = lastTokenTime + (tokenRefresh * 60 * 1000)
+                threads = []
+                for user in currentUserList:
+                    thread = executor.submit(deleteUser, user, p1Geography, p1Environment, p1At)
+                    threads.append(thread)
+                for thread in as_completed(threads):
+                    try:
+                        threadResult = thread.result()
+                        if threadResult == True:
+                            successfulDelete += 1
+                        else:
+                            failedDelete += 1
+                    except Exception as e:
+                        print(f"Thread generated an exception: {e}")
+                        infoLogger.error(f"Error: Thread generated an exception: {e}")
+                totalProcessed += readCount
+        except Exception as e:
+            print(f'Error deleting users: {e}')
+            infoLogger.error(f"Error deleting users: {e}")
+            quit()
+
     endTime = int(time.time() * 1000)
     printEnding(startTime, endTime)
-
-#need more logging
 
 main()
 
